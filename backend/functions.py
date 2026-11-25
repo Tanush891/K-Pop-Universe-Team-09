@@ -1,24 +1,32 @@
-
-from datetime import datetime, timedelta, timezone
 import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
-from sqlalchemy import Column, DateTime, Integer, String, create_engine
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, or_
 from sqlalchemy.orm import declarative_base, sessionmaker
 
+
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/kpop_universe.db")
+
+if DATABASE_URL.startswith("sqlite:///./"):
+    db_path = DATABASE_URL.replace("sqlite:///./", "", 1)
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False}
-    if DATABASE_URL.startswith("sqlite") else {},
+    if DATABASE_URL.startswith("sqlite")
+    else {},
 )
+
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 password_hasher = PasswordHasher()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "development-secret-change-before-deployment")
+SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-before-use")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 30
 REFRESH_TOKEN_DAYS = 7
@@ -32,19 +40,19 @@ class Users(Base):
     email = Column(String(255), unique=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(20), default="fan", nullable=False)
-    is_active = Column(Integer, default=1, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
 Base.metadata.create_all(engine)
 
 
-def add_user(username, email, password, role="fan"):
+def add_user(username, email, password):
     with SessionLocal() as session:
         email = email.lower()
 
         existing_user = session.query(Users).filter(
-            (Users.email == email) | (Users.username == username)
+            or_(Users.email == email, Users.username == username)
         ).first()
 
         if existing_user:
@@ -54,8 +62,9 @@ def add_user(username, email, password, role="fan"):
             username=username,
             email=email,
             hashed_password=password_hasher.hash(password),
-            role=role,
+            role="fan",
         )
+
         session.add(new_user)
         session.commit()
         session.refresh(new_user)
@@ -86,14 +95,15 @@ def create_token(user_id, role, token_type):
     else:
         expiry = now + timedelta(minutes=ACCESS_TOKEN_MINUTES)
 
-    payload = {
+    token_data = {
         "sub": str(user_id),
         "role": role,
         "type": token_type,
         "iat": now,
         "exp": expiry,
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+    return jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def make_token_pair(user_id, role):
