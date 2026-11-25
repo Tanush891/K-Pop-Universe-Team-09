@@ -3,7 +3,9 @@ from pydantic import BaseModel, EmailStr, Field
 
 import functions as db
 
-app = FastAPI(title="K-Pop Universe API")
+app = FastAPI(title="K-Pop Universe API", version="1.0.0")
+
+db.create_first_admin()
 
 
 class RegisterIn(BaseModel):
@@ -17,9 +19,48 @@ class LoginIn(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class RefreshIn(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+def get_current_user(authorization: str | None = Header(None)):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Bearer access token required",
+        )
+
+    token = authorization.split(" ", 1)[1]
+    payload = db.verify_token(token, "access")
+
+    if not payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired access token",
+        )
+
+    user = db.get_user(int(payload["sub"]))
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Account unavailable")
+
+    return user
+
+
+def require_admin(user=Depends(get_current_user)):
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    return user
+
+
 @app.post("/auth/register", status_code=201)
 def register(data: RegisterIn):
-    user_id = db.add_user(data.username, data.email, data.password)
+    user_id = db.add_user(
+        data.username,
+        data.email,
+        data.password,
+    )
 
     if not user_id:
         raise HTTPException(
@@ -47,9 +88,6 @@ def login(data: LoginIn):
 
     return db.make_token_pair(user["id"], user["role"])
 
-class RefreshIn(BaseModel):
-    refresh_token: str = Field(min_length=1)
-
 
 class OrganizerIn(BaseModel):
     username: str = Field(min_length=3, max_length=50)
@@ -57,41 +95,11 @@ class OrganizerIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
-def get_current_user(authorization: str | None = Header(None)):
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Bearer access token required")
-
-    token = authorization.split(" ", 1)[1]
-    payload = db.verify_token(token, "access")
-
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired access token")
-
-    user = db.get_user(int(payload["sub"]))
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Account unavailable")
-
-    return user
-
-
-def require_admin(user=Depends(get_current_user)):
-    if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-
-    return user
-
-
 def require_organizer(user=Depends(get_current_user)):
     if user["role"] != "organizer":
         raise HTTPException(status_code=403, detail="Organizer access required")
 
     return user
-
-
-# Creates the first admin when ADMIN_USERNAME, ADMIN_EMAIL, and
-# ADMIN_PASSWORD are set in the environment.
-db.create_first_admin()
 
 
 @app.post("/auth/refresh")
@@ -165,6 +173,17 @@ def create_artist(
     return artist
 
 
+
 @app.get("/artists")
 def get_artists():
     return db.get_artists()
+
+
+@app.get("/artists/{artist_id}")
+def get_artist(artist_id: int):
+    artist = db.get_artist(artist_id)
+
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    return artist

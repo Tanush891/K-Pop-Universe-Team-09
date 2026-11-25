@@ -246,3 +246,19 @@ def get_artists():
             }
             for artist in artists
         ]
+
+
+def get_artist(artist_id):
+    with SessionLocal() as session:
+        artist = session.get(Artists, artist_id)
+
+        if not artist:
+            return None
+
+        return {
+            "id": artist.id,
+            "name": artist.name,
+            "description": artist.description,
+            "category": artist.category,
+            "created_by": artist.created_by,
+        }
