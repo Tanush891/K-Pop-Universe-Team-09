@@ -112,3 +112,75 @@ def make_token_pair(user_id, role):
         "refresh_token": create_token(user_id, role, "refresh"),
         "token_type": "bearer",
     }
+
+def add_user(username, email, password, role="fan"):
+    with SessionLocal() as session:
+        email = email.lower()
+
+        existing_user = session.query(Users).filter(
+            (Users.email == email) | (Users.username == username)
+        ).first()
+
+        if existing_user:
+            return False
+
+        new_user = Users(
+            username=username,
+            email=email,
+            hashed_password=password_hasher.hash(password),
+            role=role,
+        )
+        session.add(new_user)
+        session.commit()
+        session.refresh(new_user)
+
+        return new_user.id
+
+
+def verify_token(token, expected_type):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.PyJWTError:
+        return False
+
+    if payload.get("type") != expected_type:
+        return False
+
+    return payload
+
+
+def get_user(user_id):
+    with SessionLocal() as session:
+        user = session.get(Users, user_id)
+
+        if not user or not user.is_active:
+            return None
+
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "role": user.role,
+        }
+
+
+def create_first_admin():
+    username = os.getenv("ADMIN_USERNAME")
+    email = os.getenv("ADMIN_EMAIL")
+    password = os.getenv("ADMIN_PASSWORD")
+
+    if not username or not email or not password:
+        return
+
+    with SessionLocal() as session:
+        admin = session.query(Users).filter_by(role="admin").first()
+
+        if not admin:
+            new_admin = Users(
+                username=username,
+                email=email.lower(),
+                hashed_password=password_hasher.hash(password),
+                role="admin",
+            )
+            session.add(new_admin)
+            session.commit()
