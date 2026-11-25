@@ -5,7 +5,17 @@ from pathlib import Path
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, create_engine, or_
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    create_engine,
+    or_,
+)
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
@@ -42,9 +52,6 @@ class Users(Base):
     role = Column(String(20), default="fan", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-
-Base.metadata.create_all(engine)
 
 
 def add_user(username, email, password):
@@ -184,3 +191,58 @@ def create_first_admin():
             )
             session.add(new_admin)
             session.commit()
+
+
+class Artists(Base):
+    __tablename__ = "artists"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), unique=True, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String(40), nullable=False)
+    created_by = Column(ForeignKey("users.id"), nullable=False)
+
+
+Base.metadata.create_all(engine)
+
+
+def add_artist(name, description, category, organizer_id):
+    with SessionLocal() as session:
+        existing_artist = session.query(Artists).filter_by(name=name).first()
+
+        if existing_artist:
+            return False
+
+        artist = Artists(
+            name=name,
+            description=description,
+            category=category,
+            created_by=organizer_id,
+        )
+        session.add(artist)
+        session.commit()
+        session.refresh(artist)
+
+        return {
+            "id": artist.id,
+            "name": artist.name,
+            "description": artist.description,
+            "category": artist.category,
+            "created_by": artist.created_by,
+        }
+
+
+def get_artists():
+    with SessionLocal() as session:
+        artists = session.query(Artists).order_by(Artists.name).all()
+
+        return [
+            {
+                "id": artist.id,
+                "name": artist.name,
+                "description": artist.description,
+                "category": artist.category,
+                "created_by": artist.created_by,
+            }
+            for artist in artists
+        ]

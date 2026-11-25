@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field
 
 import functions as db
@@ -47,9 +47,6 @@ def login(data: LoginIn):
 
     return db.make_token_pair(user["id"], user["role"])
 
-from fastapi import Depends, Header
-
-
 class RefreshIn(BaseModel):
     refresh_token: str = Field(min_length=1)
 
@@ -81,6 +78,13 @@ def get_current_user(authorization: str | None = Header(None)):
 def require_admin(user=Depends(get_current_user)):
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
+
+    return user
+
+
+def require_organizer(user=Depends(get_current_user)):
+    if user["role"] != "organizer":
+        raise HTTPException(status_code=403, detail="Organizer access required")
 
     return user
 
@@ -132,3 +136,35 @@ def create_organizer(data: OrganizerIn, admin=Depends(require_admin)):
         "email": data.email,
         "role": "organizer",
     }
+
+
+class ArtistIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1)
+    category: str = Field(min_length=1, max_length=40)
+
+
+@app.post("/artists", status_code=201)
+def create_artist(
+    data: ArtistIn,
+    organizer=Depends(require_organizer),
+):
+    artist = db.add_artist(
+        data.name,
+        data.description,
+        data.category,
+        organizer["id"],
+    )
+
+    if not artist:
+        raise HTTPException(
+            status_code=409,
+            detail="Artist name already exists",
+        )
+
+    return artist
+
+
+@app.get("/artists")
+def get_artists():
+    return db.get_artists()
