@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     or_,
 )
@@ -63,6 +64,25 @@ class FanClubs(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class ClubMembers(Base):
+    __tablename__ = "club_members"
+    __table_args__ = (UniqueConstraint("club_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    club_id = Column(Integer, ForeignKey("fan_clubs.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Posts(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    image_url = Column(String(2048), nullable=True)
+    is_hidden = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 def add_user(username, email, password):
     with SessionLocal() as session:
@@ -288,3 +308,45 @@ def get_fan_clubs():
             }
             for club in clubs
         ]
+
+def join_fan_club(club_id, fan_id):
+    with SessionLocal() as session:
+        club = session.get(FanClubs, club_id)
+
+        if not club:
+            return None
+
+        existing_member = session.query(ClubMembers).filter_by(
+            club_id=club_id,
+            user_id=fan_id,
+        ).first()
+
+        if existing_member:
+            return False
+
+        member = ClubMembers(club_id=club_id, user_id=fan_id)
+        session.add(member)
+        session.commit()
+
+        return {"joined": True, "club_id": club_id}
+
+
+def add_post(author_id, text, image_url=None):
+    with SessionLocal() as session:
+        post = Posts(
+            author_id=author_id,
+            text=text,
+            image_url=image_url,
+        )
+        session.add(post)
+        session.commit()
+        session.refresh(post)
+
+        return {
+            "id": post.id,
+            "author_id": post.author_id,
+            "text": post.text,
+            "image_url": post.image_url,
+            "created_at": post.created_at,
+            "like_count": 0,
+        }

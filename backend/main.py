@@ -1,5 +1,5 @@
 from fastapi import Depends, FastAPI, Header, HTTPException
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
 import functions as db
 
@@ -102,6 +102,19 @@ def require_organizer(user=Depends(get_current_user)):
     return user
 
 
+def require_role(role: str):
+    def role_dependency(user=Depends(get_current_user)):
+        if user["role"] != role:
+            raise HTTPException(
+                status_code=403,
+                detail=f"{role.capitalize()} access required",
+            )
+
+        return user
+
+    return role_dependency
+
+
 @app.post("/auth/refresh")
 def refresh(data: RefreshIn):
     payload = db.verify_token(data.refresh_token, "refresh")
@@ -188,7 +201,33 @@ def get_artist(artist_id: int):
 
     return artist
 
-
 @app.get("/fan-clubs")
 def get_fan_clubs():
     return db.get_fan_clubs()
+
+
+class PostIn(BaseModel):
+    text: str = Field(min_length=1, max_length=5000)
+    image_url: HttpUrl | None = None
+
+
+@app.post("/fan-clubs/{club_id}/join", status_code=201)
+def join_fan_club(club_id: int, fan=Depends(require_role("fan"))):
+    result = db.join_fan_club(club_id, fan["id"])
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Fan club not found")
+
+    if result is False:
+        raise HTTPException(
+            status_code=409,
+            detail="You already joined this fan club",
+        )
+
+    return result
+
+
+@app.post("/posts", status_code=201)
+def create_post(data: PostIn, fan=Depends(require_role("fan"))):
+    image_url = str(data.image_url) if data.image_url else None
+    return db.add_post(fan["id"], data.text, image_url)
