@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -413,3 +414,66 @@ def add_post(author_id, text, image_url=None):
             "created_at": post.created_at,
             "like_count": 0,
         }
+
+def create_poll(artist_id, organizer_id, question, options, opens_at, closes_at):
+    with SessionLocal() as session:
+        if not session.get(Artists, artist_id):
+            return None
+
+        poll = Polls(
+            artist_id=artist_id,
+            organizer_id=organizer_id,
+            question=question,
+            options=json.dumps(options),
+            opens_at=opens_at,
+            closes_at=closes_at,
+        )
+
+        session.add(poll)
+        session.commit()
+        session.refresh(poll)
+
+        return {
+            "id": poll.id,
+            "artist_id": poll.artist_id,
+            "question": poll.question,
+            "options": options,
+            "opens_at": poll.opens_at,
+            "closes_at": poll.closes_at,
+        }
+
+
+def vote_in_poll(poll_id, fan_id, option_index):
+    with SessionLocal() as session:
+        poll = session.get(Polls, poll_id)
+
+        if not poll:
+            return "not_found"
+
+        now = datetime.utcnow()
+
+        if now < poll.opens_at or now >= poll.closes_at:
+            return "closed"
+
+        options = json.loads(poll.options)
+
+        if option_index < 0 or option_index >= len(options):
+            return "invalid_option"
+
+        existing_vote = session.query(PollVotes).filter_by(
+            poll_id=poll_id,
+            user_id=fan_id,
+        ).first()
+
+        if existing_vote:
+            return "already_voted"
+
+        vote = PollVotes(
+            poll_id=poll_id,
+            user_id=fan_id,
+            option_index=option_index,
+        )
+        session.add(vote)
+        session.commit()
+
+        return {"poll_id": poll_id, "option_index": option_index}

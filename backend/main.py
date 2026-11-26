@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, EmailStr, Field, HttpUrl
 
@@ -234,6 +236,18 @@ class PostIn(BaseModel):
     image_url: HttpUrl | None = None
 
 
+class PollIn(BaseModel):
+    artist_id: int = Field(gt=0)
+    question: str = Field(min_length=1, max_length=500)
+    options: list[str] = Field(min_length=2, max_length=10)
+    opens_at: datetime
+    closes_at: datetime
+
+
+class VoteIn(BaseModel):
+    option_index: int = Field(ge=0)
+
+
 @app.post("/fan-clubs/{club_id}/join", status_code=201)
 def join_fan_club(club_id: int, fan=Depends(require_role("fan"))):
     result = db.join_fan_club(club_id, fan["id"])
@@ -254,3 +268,50 @@ def join_fan_club(club_id: int, fan=Depends(require_role("fan"))):
 def create_post(data: PostIn, fan=Depends(require_role("fan"))):
     image_url = str(data.image_url) if data.image_url else None
     return db.add_post(fan["id"], data.text, image_url)
+
+@app.post("/polls", status_code=201)
+def create_poll(
+    data: PollIn,
+    organizer=Depends(require_role("organizer")),
+):
+    opens_at = data.opens_at
+    closes_at = data.closes_at
+
+    if opens_at.tzinfo is not None:
+        opens_at = opens_at.astimezone(timezone.utc).replace(tzinfo=None)
+    if closes_at.tzinfo is not None:
+        closes_at = closes_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+    poll = db.create_poll(
+        data.artist_id,
+        organizer["id"],
+        data.question,
+        data.options,
+        opens_at,
+        closes_at,
+    )
+
+    if poll is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    return poll
+
+
+@app.post("/polls/{poll_id}/vote", status_code=201)
+def vote(
+    poll_id: int,
+    data: VoteIn,
+    fan=Depends(require_role("fan")),
+):
+    result = db.vote_in_poll(poll_id, fan["id"], data.option_index)
+
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if result == "closed":
+        raise HTTPException(status_code=400, detail="Poll is not open")
+    if result == "invalid_option":
+        raise HTTPException(status_code=422, detail="Invalid option index")
+    if result == "already_voted":
+        raise HTTPException(status_code=409, detail="You already voted in this poll")
+
+    return result
