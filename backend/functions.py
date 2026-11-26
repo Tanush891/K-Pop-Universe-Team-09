@@ -93,6 +93,28 @@ class PostLikes(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
 
+class Polls(Base):
+    __tablename__ = "polls"
+
+    id = Column(Integer, primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artists.id"), nullable=False)
+    organizer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    question = Column(String(500), nullable=False)
+    options = Column(Text, nullable=False)
+    opens_at = Column(DateTime, nullable=False)
+    closes_at = Column(DateTime, nullable=False)
+
+
+class PollVotes(Base):
+    __tablename__ = "poll_votes"
+    __table_args__ = (UniqueConstraint("poll_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    poll_id = Column(Integer, ForeignKey("polls.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    option_index = Column(Integer, nullable=False)
+
+
 def add_user(username, email, password):
     with SessionLocal() as session:
         email = email.lower()
