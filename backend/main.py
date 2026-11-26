@@ -187,3 +187,8 @@ def get_artist(artist_id: int):
         raise HTTPException(status_code=404, detail="Artist not found")
 
     return artist
+
+
+@app.get("/fan-clubs")
+def get_fan_clubs():
+    return db.get_fan_clubs()

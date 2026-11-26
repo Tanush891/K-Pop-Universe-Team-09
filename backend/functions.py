@@ -272,3 +272,19 @@ def get_artist(artist_id):
             "category": artist.category,
             "created_by": artist.created_by,
         }
+
+
+def get_fan_clubs():
+    with SessionLocal() as session:
+        clubs = session.query(FanClubs).order_by(FanClubs.name).all()
+
+        return [
+            {
+                "id": club.id,
+                "name": club.name,
+                "description": club.description,
+                "artist_id": club.artist_id,
+                "created_by": club.created_by,
+            }
+            for club in clubs
+        ]
