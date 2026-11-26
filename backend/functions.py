@@ -53,6 +53,16 @@ class Users(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class FanClubs(Base):
+    __tablename__ = "fan_clubs"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), unique=True, nullable=False)
+    description = Column(Text, nullable=False)
+    artist_id = Column(Integer, ForeignKey("artists.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 def add_user(username, email, password):
     with SessionLocal() as session:
