@@ -168,3 +168,8 @@ def create_artist(
 @app.get("/artists")
 def get_artists():
     return db.get_artists()
+
+
+@app.get("/fan-clubs")
+def get_fan_clubs():
+    return db.get_fan_clubs()

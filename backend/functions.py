@@ -203,6 +203,16 @@ class Artists(Base):
     created_by = Column(ForeignKey("users.id"), nullable=False)
 
 
+class FanClubs(Base):
+    __tablename__ = "fan_clubs"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(120), unique=True, nullable=False)
+    description = Column(Text, nullable=False)
+    artist_id = Column(ForeignKey("artists.id"), nullable=False)
+    created_by = Column(ForeignKey("users.id"), nullable=False)
+
+
 Base.metadata.create_all(engine)
 
 
@@ -245,4 +255,20 @@ def get_artists():
                 "created_by": artist.created_by,
             }
             for artist in artists
+        ]
+
+
+def get_fan_clubs():
+    with SessionLocal() as session:
+        clubs = session.query(FanClubs).order_by(FanClubs.name).all()
+
+        return [
+            {
+                "id": club.id,
+                "name": club.name,
+                "description": club.description,
+                "artist_id": club.artist_id,
+                "created_by": club.created_by,
+            }
+            for club in clubs
         ]
