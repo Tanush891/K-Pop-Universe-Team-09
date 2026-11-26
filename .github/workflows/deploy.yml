@@ -1,0 +1,53 @@
+
+name: K-Pop Universe CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: hemanth2008/kpop-project:latest
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: SECRET_KEY
+          script: |
+            set -e
+            mkdir -p /home/ec2-user/kpop-universe-data
+            docker pull hemanth2008/kpop-project:latest
+            docker rm -f kpop-universe-team09 || true
+            docker run -d \
+              --name kpop-universe-team09 \
+              --restart unless-stopped \
+              -p 8001:8001 \
+              -v /home/ec2-user/kpop-universe-data:/data \
+              -e DATABASE_URL=sqlite:////data/kpop_universe.db \
+              -e SECRET_KEY="$SECRET_KEY" \
+              hemanth2008/kpop-project:latest
