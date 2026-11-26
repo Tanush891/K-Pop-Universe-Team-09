@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     or_,
 )
@@ -62,6 +63,56 @@ class FanClubs(Base):
     artist_id = Column(Integer, ForeignKey("artists.id"), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class ClubMembers(Base):
+    __tablename__ = "club_members"
+    __table_args__ = (UniqueConstraint("club_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    club_id = Column(Integer, ForeignKey("fan_clubs.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Posts(Base):
+    __tablename__ = "posts"
+
+    id = Column(Integer, primary_key=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    image_url = Column(String(2048), nullable=True)
+    is_hidden = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class PostLikes(Base):
+    __tablename__ = "post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    post_id = Column(Integer, ForeignKey("posts.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+
+class Polls(Base):
+    __tablename__ = "polls"
+
+    id = Column(Integer, primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artists.id"), nullable=False)
+    organizer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    question = Column(String(500), nullable=False)
+    options = Column(Text, nullable=False)
+    opens_at = Column(DateTime, nullable=False)
+    closes_at = Column(DateTime, nullable=False)
+
+
+class PollVotes(Base):
+    __tablename__ = "poll_votes"
+    __table_args__ = (UniqueConstraint("poll_id", "user_id"),)
+
+    id = Column(Integer, primary_key=True)
+    poll_id = Column(Integer, ForeignKey("polls.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    option_index = Column(Integer, nullable=False)
 
 
 def add_user(username, email, password):
@@ -302,4 +353,63 @@ def add_fan_club(name, description, artist_id, fan_id):
             "description": club.description,
             "artist_id": club.artist_id,
             "created_by": club.created_by,
+        }
+
+
+def get_fan_clubs():
+    with SessionLocal() as session:
+        clubs = session.query(FanClubs).order_by(FanClubs.name).all()
+
+        return [
+            {
+                "id": club.id,
+                "name": club.name,
+                "description": club.description,
+                "artist_id": club.artist_id,
+                "created_by": club.created_by,
+            }
+            for club in clubs
+        ]
+
+
+def join_fan_club(club_id, fan_id):
+    with SessionLocal() as session:
+        club = session.get(FanClubs, club_id)
+
+        if not club:
+            return None
+
+        existing_member = session.query(ClubMembers).filter_by(
+            club_id=club_id,
+            user_id=fan_id,
+        ).first()
+
+        if existing_member:
+            return False
+
+        member = ClubMembers(club_id=club_id, user_id=fan_id)
+        session.add(member)
+        session.commit()
+
+        return {"joined": True, "club_id": club_id}
+
+
+def add_post(author_id, text, image_url=None):
+    with SessionLocal() as session:
+        post = Posts(
+            author_id=author_id,
+            text=text,
+            image_url=image_url,
+        )
+        session.add(post)
+        session.commit()
+        session.refresh(post)
+
+        return {
+            "id": post.id,
+            "author_id": post.author_id,
+            "text": post.text,
+            "image_url": post.image_url,
+            "created_at": post.created_at,
+            "like_count": 0,
         }
