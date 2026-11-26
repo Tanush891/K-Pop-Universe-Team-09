@@ -102,6 +102,13 @@ def require_organizer(user=Depends(get_current_user)):
     return user
 
 
+def require_fan(user=Depends(get_current_user)):
+    if user["role"] != "fan":
+        raise HTTPException(status_code=403, detail="Fan access required")
+
+    return user
+
+
 @app.post("/auth/refresh")
 def refresh(data: RefreshIn):
     payload = db.verify_token(data.refresh_token, "refresh")
@@ -145,7 +152,6 @@ def create_organizer(data: OrganizerIn, admin=Depends(require_admin)):
         "role": "organizer",
     }
 
-
 class ArtistIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1)
@@ -187,3 +193,27 @@ def get_artist(artist_id: int):
         raise HTTPException(status_code=404, detail="Artist not found")
 
     return artist
+
+
+class ClubIn(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(min_length=1)
+    artist_id: int
+
+
+@app.post("/fan-clubs", status_code=201)
+def create_fan_club(data: ClubIn, fan=Depends(require_fan)):
+    club = db.add_fan_club(
+        data.name,
+        data.description,
+        data.artist_id,
+        fan["id"],
+    )
+
+    if club is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    if club is False:
+        raise HTTPException(status_code=409, detail="Fan club name already exists")
+
+    return club

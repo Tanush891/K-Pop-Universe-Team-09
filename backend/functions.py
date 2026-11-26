@@ -202,7 +202,6 @@ def create_first_admin():
             session.add(new_admin)
             session.commit()
 
-
 class Artists(Base):
     __tablename__ = "artists"
 
@@ -271,4 +270,36 @@ def get_artist(artist_id):
             "description": artist.description,
             "category": artist.category,
             "created_by": artist.created_by,
+        }
+
+
+def add_fan_club(name, description, artist_id, fan_id):
+    with SessionLocal() as session:
+        artist = session.get(Artists, artist_id)
+
+        if not artist:
+            return None
+
+        existing_club = session.query(FanClubs).filter_by(name=name).first()
+
+        if existing_club:
+            return False
+
+        club = FanClubs(
+            name=name,
+            description=description,
+            artist_id=artist_id,
+            created_by=fan_id,
+        )
+
+        session.add(club)
+        session.commit()
+        session.refresh(club)
+
+        return {
+            "id": club.id,
+            "name": club.name,
+            "description": club.description,
+            "artist_id": club.artist_id,
+            "created_by": club.created_by,
         }
